@@ -332,7 +332,7 @@ class SocketInterface {
             return data;
         }
 
-        void close() const {
+        void close() {
             closeSocket_native(clientSocket);
             connected = false;
         }
