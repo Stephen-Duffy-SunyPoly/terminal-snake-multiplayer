@@ -8,9 +8,11 @@
  * TypeID - 1 bytes, contentLength - 4 bytes, content  - length bytes
  *
  * types:
- * WINDOW_SIZE_N - id 1, length 13,data: client with, client height
+ * WINDOW_SIZE_N - id 1, length 13,data: client with - int, client height - int
+ * APPLES_N - id 2, length 9 + 8*numapples, data: number apples -int, (repeats) apple X - int apple Y - int
 */
 #define WINDOW_SIZE_N 1
+#define APPLES_N 2
 
 
 #ifdef _WIN32
@@ -29,6 +31,8 @@ typedef struct position{
 	int x;
 	int y;
 }position;
+
+position useWindow;
 
 void handleStop(){
 	gameRunning=false;
@@ -114,7 +118,7 @@ int main() {
 	int revieveBufferPos = 0;
 	position theirWindow = decodeWindowSize(receivingBuffer, revieveBufferPos);
 
-	position useWindow;
+
 	useWindow.x = min(theirWindow.x, width);
 	useWindow.y = min(theirWindow.y, height);
 
@@ -122,17 +126,17 @@ int main() {
 
 	stopHandler::setContrlCHandler(&handleStop);//register the handler for ctrl c
 	//Microsoft visual c++ compiler does not allow arrays to be defined with variables :'(
-	char * prevScreen = (char *)malloc(height*width*sizeof(char));
+	char * prevScreen = (char *)malloc(useWindow.y*useWindow.x*sizeof(char));
 	//y, x
-	char * screen = (char *)malloc(height*width*sizeof(char));
-	//initialize the screen with emptyness
-	for(int i=0;i<width;i++){
-		for(int j=0;j<height;j++){
-			screen[j*width+i] = '.';
+	char * screen = (char *)malloc(useWindow.y*useWindow.x*sizeof(char));
+	//initialize the screen with emptiness
+	for(int i=0;i<useWindow.x;i++){
+		for(int j=0;j<useWindow.y;j++){
+			screen[j*useWindow.x+i] = '.';
 		}
 	}
-
-	//fill the screen with white so that any un playable space will be knwon
+	cls();//clear everything currenly on the screen
+	//fill the real screen with white so that any un playable space will be knwon
 	setBackgroundColor(WHITE);
 	gotoxy(0,0);
 	for (int i = 0; i < height; i++) {
@@ -148,13 +152,13 @@ int main() {
 	apple.y=5;
 	vector<position> snake;
 	position p;
-	p.x=width/2;
-	p.y=height/2;
+	p.x=useWindow.x/2;
+	p.y=useWindow.y/2;
 	snake.push_back(p);
 
-	screen[apple.y*width+apple.x] = 'A';
-	screen[p.y*width+p.x] = 'S';
-	cls();
+	screen[apple.y*useWindow.x+apple.x] = 'A';
+	screen[p.y*useWindow.x+p.x] = 'S';
+
 	//hidecursor();
 	volatile CursorHider hideCursor;//automatically hides the cursor and unhides when deallocated
 	#ifdef _WIN32
@@ -173,7 +177,7 @@ int main() {
 		render(screen,prevScreen);
 		//Remove the old snake from the screen
 		for(size_t i=0;i<snake.size();i++){
-			screen[snake[i].y*width+snake[i].x] = '.';
+			screen[snake[i].y*useWindow.x+snake[i].x] = '.';
 		}
 
 		//Calculate the new snake
@@ -210,8 +214,8 @@ int main() {
 			snake.push_back(np);
 			bool notValid = true;
 			while(notValid){
-				apple.x = rand()%(width-5)+3;
-				apple.y = rand()%(height-5)+3;
+				apple.x = rand()%(useWindow.x-5)+3;
+				apple.y = rand()%(useWindow.y-5)+3;
 				notValid=false;
 				for(size_t i=0;i<snake.size();i++){
 					if(snake[i].x == apple.x && snake[i].y == apple.y){
@@ -220,7 +224,7 @@ int main() {
 					}
 				}
 			}
-			screen[apple.y*width+apple.x]='A';
+			screen[apple.y*useWindow.x+apple.x]='A';
 		}
 
 		tmp = snake[0];
@@ -235,9 +239,9 @@ int main() {
 
 		//add the new snake to the screen
 		for(size_t i=0;i<snake.size();i++){
-			screen[snake[i].y*width+snake[i].x] = 'S';
+			screen[snake[i].y*useWindow.x+snake[i].x] = 'S';
 		}
-		if(sp.x<=0 || sp.x >=width || sp.y <= 0 || sp.y >= height){
+		if(sp.x<=0 || sp.x >=useWindow.x || sp.y <= 0 || sp.y >= useWindow.y){
 			gameRunning = false;
 		}
 		msleep((heading % 2 ==0)?60:35);
@@ -245,7 +249,7 @@ int main() {
 
 	resetColor();
 	showcursor();
-	gotoxy(2,height -2);
+	gotoxy(2,useWindow.y -2);
 	cout << "GAME OVER!! Score:" <<snake.size() << endl;
 	//cout << snake[0].x <<" " << snake[0].y << endl;
 	showcursor();
@@ -260,18 +264,18 @@ int main() {
 //. - blank space
 //E - other player
 void render(char current[] , char prev[]){
-	for(int x=0;x<width;x++){
-		for(int y=0;y<height;y++){
-			int index = x + y*width;
+	for(int x=0;x<useWindow.x;x++){
+		for(int y=0;y<useWindow.y;y++){
+			int index = x + y*useWindow.x;
 			if(current[index] != prev[index]){
 				prev[index] = current[index];
 				switch(current[index]){
 					case 'S'://your snake
 						gotoxy(x,y);
 						//set the color to green by default but make is yellow or brown when it gets close to the edge
-						if(x==0 || x == width-1 || y == 0 || y == height-1){
+						if(x==0 || x == useWindow.x-1 || y == 0 || y == useWindow.y-1){
 							setBackgroundColor(BROWN);
-						}else if(x <= 2 || x >= width-3 || y <= 3 || y >= height-3){
+						}else if(x <= 2 || x >= useWindow.x-3 || y <= 3 || y >= useWindow.y-3){
 							setBackgroundColor(YELLOW);
 						}else{
 							setBackgroundColor(GREEN);
