@@ -5,12 +5,17 @@
 #ifndef TERMINAL_SNAKE_MULTYPLAYER_NETWORK_H
 #define TERMINAL_SNAKE_MULTYPLAYER_NETWORK_H
 
-#ifdef __WIN32__
+#ifdef _WIN32
+//woindows specific imports and defines
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib") // link the windows networking libs apperently
 
-#define socketDscriptor void
-#define socketFailure
+#define socketDscriptor SOCKET
+#define socketFailure INVALID_SOCKET
+
 #else
-
+//non windows imports and defines
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -29,8 +34,30 @@
 
 //cross platform things can go here
 socketDscriptor startServerSocket_native(int port) {
-#ifdef __WIN32__
-    return;
+#ifdef _WIN32
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed "<< WSAGetLastError() <<std::endl;
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port = htons(static_cast<u_short>(port));
+
+    //bind the socket
+    if (bind(serverSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        std::cerr << "Bind failed.\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+
+    listen(serverSocket, SOMAXCONN);
+
+    return serverSocket;
 #else
     addrinfo addressInfo{}, *result;
     addressInfo.ai_family = AF_INET;
@@ -84,8 +111,18 @@ socketDscriptor startServerSocket_native(int port) {
 }
 
 socketDscriptor acceptIncomingConnection_native(socketDscriptor serverSocket) {
-#ifdef __WIN32__
-    return;
+#ifdef _WIN32
+    sockaddr_in clientAddress;
+    int clientAddressLength = sizeof(clientAddress);
+    SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddress, &clientAddressLength);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Accept failed.\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+    closesocket(serverSocket);
+    return clientSocket;
 #else
     sockaddr_storage theirAddress{};
     socklen_t theirAddressSize = sizeof(theirAddress);
@@ -103,7 +140,10 @@ socketDscriptor acceptIncomingConnection_native(socketDscriptor serverSocket) {
 }
 
 void closeSocket_native(socketDscriptor socket) {
-#ifdef __WIN32__
+#ifdef _WIN32
+    if (socket != INVALID_SOCKET) {
+        closesocket(socket);
+    }
 #else
     if (socket != socketFailure && socket != 0){
         close(socket);
@@ -112,8 +152,28 @@ void closeSocket_native(socketDscriptor socket) {
 }
 
 socketDscriptor connectToServer_native(const std::string &ip,int port) {
-#ifdef __WIN32__
-    return;
+#ifdef _WIN32
+    sockaddr_in serverAddress;
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed.\n";
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = inet_addr(ip.c_str());
+    serverAddress.sin_port = htons(port);
+
+    //the connection
+    if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
+        std::cerr << "Connection failed.\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+
+    return clientSocket;
 #else
     addrinfo addressInfo{}, *serverInfo;
     addressInfo.ai_family = AF_UNSPEC;
@@ -156,14 +216,16 @@ socketDscriptor connectToServer_native(const std::string &ip,int port) {
 
 
 void sendData_native(socketDscriptor socket, const uint8_t * data, size_t length) {
-#ifdef __WIN32__
+#ifdef _WIN32
+    send(socket,reinterpret_cast<const char *>(data),static_cast<int>(length),0);
 #else
     send(socket, data, length * sizeof(uint8_t), 0);
 #endif
 }
 
 long receiveData_native(socketDscriptor socket, uint8_t *dataBuffer, size_t length) {
-#ifdef __WIN32__
+#ifdef _WIN32
+    return recv(socket,reinterpret_cast<char *>(dataBuffer),static_cast<int>(length),0);
 #else
     return recv(socket, dataBuffer, length * sizeof(uint8_t), 0);
 #endif
@@ -183,11 +245,29 @@ class SocketInterface {
             isServer = false;
             this->ip = ip;
             this->port = port;
+#ifdef _WIN32
+            //the IDE is showing an error here but it builds fine sooooooooooooo
+            WSADATA wsaData;
+            int result;//init the windows network lib
+            if ((result = WSAStartup(MAKEWORD(2, 2), &wsaData))) {
+                std::cerr << "WSAStartup failed. "<<result<<std::endl;
+                return;
+            }
+#endif
         }
 
         explicit SocketInterface(int port) {
             isServer = true;
             this->port = port;
+#ifdef _WIN32
+            //the IDE is showing an error here but it builds fine sooooooooooooo
+            WSADATA wsaData;
+            int result;//init the windows network lib
+            if ((result = WSAStartup(MAKEWORD(2, 2), &wsaData))) {
+                std::cerr << "WSAStartup failed. "<<result<<std::endl;
+                return;
+            }
+#endif
         }
 
         bool connect() {
@@ -220,7 +300,6 @@ class SocketInterface {
         }
 
         [[nodiscard]] bool isConnected() const {
-            //TODO check connection status here
             return connected;
         }
 
@@ -241,7 +320,8 @@ class SocketInterface {
             //read the incomming data
             long bytesRecieved = receiveData_native(clientSocket, dataBuffer, sizeof(dataBuffer));
             if (bytesRecieved == 0 || bytesRecieved == -1) {
-                //process error / close
+                connected = false;
+                return {};
             }
             //package the data into a vector
             std::vector<uint8_t> data(bytesRecieved);
@@ -254,6 +334,7 @@ class SocketInterface {
 
         void close() const {
             closeSocket_native(clientSocket);
+            connected = false;
         }
 };
 

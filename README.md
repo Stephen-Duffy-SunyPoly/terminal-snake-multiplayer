@@ -21,11 +21,11 @@ g++ -o snake.game -pthread src/snake.cpp
 ```cmd
 git clone https://github.com/jSdCool/terminal-snake
 cd terminal-snake
-g++ -o snake.exe src/snake.cpp
+g++ -o snake.exe -lws2_32 src/snake.cpp
 ```
 or with visual c++ compiler
 ```cmd
 git clone https://github.com/jSdCool/terminal-snake
 cd terminal-snake
-cl src/snake.cpp
+cl src/snake.cpp -lws2_32
 ```
