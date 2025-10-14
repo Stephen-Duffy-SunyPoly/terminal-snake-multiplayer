@@ -6,3 +6,5 @@
 .settings/org.eclipse.core.resources.prefs
 Debug/snake.exe
 Debug/src/snake.o
+*.exe
+*.obj
