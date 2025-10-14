@@ -3,6 +3,8 @@
 #include "stopHandler.h"
 #include <vector>
 #include <cstdbool>
+#include "network.h"
+
 #ifdef _WIN32
 	#include <windows.h>
 #else

@@ -8,3 +8,4 @@ Debug/snake.exe
 Debug/src/snake.o
 *.exe
 *.obj
+/src/snake
