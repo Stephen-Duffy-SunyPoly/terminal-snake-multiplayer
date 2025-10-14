@@ -74,7 +74,8 @@ int main() {
 	screen[apple.y*width+apple.x] = 'A';
 	screen[p.y*width+p.x] = 'S';
 	cls();
-	hidecursor();
+	//hidecursor();
+	volatile CursorHider hideCursor;//automatically hides the cursor and unhides when deallocated
 	#ifdef _WIN32
 		DWORD myThreadID;
 		CreateThread(0, 0, winThread, &heading, 0, &myThreadID);
@@ -166,7 +167,8 @@ int main() {
 	gotoxy(2,height -2);
 	cout << "GAME OVER!! Score:" <<snake.size() << endl;
 	//cout << snake[0].x <<" " << snake[0].y << endl;
-
+	showcursor();
+	//cursor should auto unhide but in case it does not this is here
 }
 
 void render(char current[] , char prev[]){
@@ -232,6 +234,7 @@ void * inputThread(void * args){
 			cout << "Arrow Keys / WASD - change direction" << endl << "P - pause" << endl <<"Q - quit"<<endl<<"H - display this message";
 		}
 	}
+	showcursor();//just in case
 	return nullptr;
 }
 
