@@ -23,6 +23,7 @@
 	#include <windows.h>
 #else
 	#include <pthread.h>
+    #include <memory>
 #endif
 using namespace std;
 using namespace rogueutil;
@@ -330,6 +331,7 @@ int main() {
 						}
 					}
 				}
+				apples.push_back(apple);
 			}
 		}
 
