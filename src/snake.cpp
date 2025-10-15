@@ -34,7 +34,10 @@ using namespace rogueutil;
 
 int width;
 int height;
-bool gameRunning=true,paused=false,gameWon = false;
+bool gameRunning=true;
+bool paused=false;
+bool gameWon = false;
+bool ready = false;
 
 typedef struct position{
 	int x;
@@ -235,14 +238,8 @@ int main() {
 	//wait for client to be ready
 	encodeReady(sendingBuffer);//signal you are readdy
 	socket.send(sendingBuffer);
-	receivingBuffer = socket.receive();
-	int tmpIndex = 0;
-	//at this point we are only expecting to receive the ready signal
-	if (!decodeReady(receivingBuffer,tmpIndex)) {
-		cerr << "FAILED TO DECODE READY PACKET!" << endl;
-		socket.close();
-		return EXIT_FAILURE;
-	}
+
+	sendingBuffer.clear();
 
 
 	//hidecursor();
@@ -264,6 +261,8 @@ int main() {
 		pthread_t inputThreadObject2;
 		pthread_create(&inputThreadObject2, nullptr,networkReadThread,(void *)&netThreadInfo);
 	#endif
+
+	while (!ready && socket.isConnected()){}//wait for the client to be ready before starting the game
 
 	//main game process loop
 	while(gameRunning){
@@ -685,7 +684,7 @@ void encodeReady(vector<uint8_t> &buffer) {
 }
 bool decodeReady(vector<uint8_t> &buffer, int &pos) {
 	if (buffer[pos] != READY_N) {
-		cerr << "attempt to decode ready but data was not ready! "<<endl;
+		cerr << "attempt to decode ready but data was not ready! "<<(int)buffer[pos]<<endl;
 		return false;
 	}
 	int totalContentLength = static_cast<int>(buffer.size()) - pos;
@@ -734,7 +733,10 @@ void * networkReadThread(void * thread_data) {
 				gameRunning = false;
 				gameWon = true;
 				decodeGameOver(receivedData, dataPos);
-			}else {
+			} else if (packetType == READY_N) {
+				decodeReady(receivedData, dataPos);
+				ready = true;
+			} else {
 				cerr << "unknown packet type " << packetType << endl;
 				break;
 			}
