@@ -436,6 +436,7 @@ void render(char current[] , char prev[]){
 			}
 		}
 	}
+	cout.flush();
 }
 
 void * inputThread(void * args){
