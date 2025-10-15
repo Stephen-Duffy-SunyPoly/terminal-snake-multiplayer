@@ -645,7 +645,7 @@ bool decodeGameOver(vector<uint8_t> &buffer, int &pos) {
 	int totalContentLength = static_cast<int>(buffer.size()) - pos;
 	pos++;
 	int dataLength = decodeInt(buffer, pos);
-	if (dataLength != 13) {
+	if (dataLength != 5) {
 		cerr << "game over packet did not have the correct length" << endl;
 		return false;
 	}
