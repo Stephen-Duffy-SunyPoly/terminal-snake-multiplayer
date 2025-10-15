@@ -223,6 +223,15 @@ static const RUTIL_STRING ANSI_BACKGROUND_BLUE    = "\033[44m";
 static const RUTIL_STRING ANSI_BACKGROUND_MAGENTA = "\033[45m";
 static const RUTIL_STRING ANSI_BACKGROUND_CYAN    = "\033[46m";
 static const RUTIL_STRING ANSI_BACKGROUND_WHITE   = "\033[47m";
+//for some reason half the background colors were not present, so i added them
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_BLACK   = "\033[100m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_RED     = "\033[101m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_GREEN   = "\033[102m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_YELLOW  = "\033[103m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_BLUE    = "\033[104m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_MAGENTA = "\033[105m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_CYAN    = "\033[106m";
+static const RUTIL_STRING ANSI_BACKGROUND_BRIGHT_WHITE   = "\033[107m";
 /* Remaining colors not supported as background colors */
 
 /**
@@ -470,6 +479,23 @@ getANSIBgColor(const int c)
 		return ANSI_BACKGROUND_YELLOW;
 	case GREY   :
 		return ANSI_BACKGROUND_WHITE;
+	//for some reason half the background colors were not present, so i added them
+	case DARKGREY    :
+		return ANSI_BACKGROUND_BRIGHT_BLACK;
+	case LIGHTBLUE   :
+		return ANSI_BACKGROUND_BRIGHT_BLUE;
+	case LIGHTGREEN  :
+		return ANSI_BACKGROUND_BRIGHT_GREEN;
+	case LIGHTCYAN   :
+		return ANSI_BACKGROUND_BRIGHT_CYAN;
+	case LIGHTRED    :
+		return ANSI_BACKGROUND_BRIGHT_RED;
+	case LIGHTMAGENTA:
+		return ANSI_BACKGROUND_BRIGHT_MAGENTA;
+	case YELLOW      :
+		return ANSI_BACKGROUND_BRIGHT_YELLOW;
+	case WHITE       :
+		return ANSI_BACKGROUND_BRIGHT_WHITE;
 	default:
 		return "";
 	}
