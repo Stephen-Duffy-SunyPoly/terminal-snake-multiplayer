@@ -21,7 +21,7 @@ g++ -o snake.game -pthread src/snake.cpp -std=c++17
 ```cmd
 git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
-g++ -o snake.exe -lws2_32 src/snake.cpp -std=c++17
+g++ -o snake.exe -lws2_32 src/snake.cpp -std=c++17      
 ```
 or with visual c++ compiler
 ```cmd

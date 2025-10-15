@@ -5,18 +5,20 @@
 #include <vector>
 #include <cstdbool>
 /**Network protocol
- * TypeID - 1 bytes, contentLength - 4 bytes, content  - length bytes
+ * TypeID - 1 byte, contentLength - 4 bytes, content  - length - 5 bytes
  *
  * types:
  * WINDOW_SIZE_N - id 1, length 13,data: client with - int, client height - int
  * APPLES_N - id 2, length 9 + 8*numapples, data: number apples -int, (repeats) apple X - int apple Y - int
  * SNAKE_N - id 3, length 9 + 8*snake length, data snake length - int, (repeats) snake X - int snake Y - int
  * APPLE_EAT_N - id 4, length 13, data: apple X - int, apple Y - int
+ * GAME_OVER_N - id 5, length 5
 */
 #define WINDOW_SIZE_N 1
 #define APPLES_N 2
 #define SNAKE_N 3
 #define APPLE_EAT_N 4
+#define GAME_OVER_N 5
 
 
 #ifdef _WIN32
@@ -30,7 +32,7 @@ using namespace rogueutil;
 
 int width;
 int height;
-bool gameRunning=true,paused=false;
+bool gameRunning=true,paused=false,gameWon = false;
 
 typedef struct position{
 	int x;
@@ -71,6 +73,8 @@ void encodeSnake(vector<uint8_t> &buffer, vector<position> &snake);
 vector<position> decodeSnake(vector<uint8_t> &buffer, int &pos);
 void encodeAppleEat(vector<uint8_t> &buffer, position &appleEat);
 position decodeAppleEat(vector<uint8_t> &buffer, int &pos);
+void encodeGameOver(vector<uint8_t> &buffer);
+bool decodeGameOver(vector<uint8_t> &buffer, int &pos);
 
 int main() {
 	width = tcols();
@@ -285,14 +289,14 @@ int main() {
 		for(size_t i=0;i<snake.size();i++){
 			if(snake[i].x == sp.x && snake[i].y == sp.y){
 				gameRunning=false;
-				//TODO send you win to the other plauer
+				encodeGameOver(sendingBuffer);
 				break;
 			}
 		}
 		for(size_t i=0;i<otherSnake.size();i++){
 			if(otherSnake[i].x == sp.x && otherSnake[i].y == sp.y){
 				gameRunning=false;
-				//TODO send you win to the other plauer
+				encodeGameOver(sendingBuffer);
 				break;
 			}
 		}
@@ -360,7 +364,7 @@ int main() {
 		}
 		if(sp.x<=0 || sp.x >=useWindow.x || sp.y <= 0 || sp.y >= useWindow.y){
 			gameRunning = false;
-			//TODO send the you win message to the other plauer
+			encodeGameOver(sendingBuffer);
 		}
 
 		//send snake info and updated apples if on the host
@@ -380,7 +384,7 @@ int main() {
 	showcursor();
 	socket.close();
 	gotoxy(2,useWindow.y -2);
-	cout << "GAME OVER!! Score:" <<snake.size() << endl;
+	cout << "GAME OVER!! Score:" <<snake.size() <<" "<<(gameWon? "YOU WIN!!":"YOU LOOSE") << endl;
 
 
 	showcursor();
@@ -629,6 +633,29 @@ position decodeAppleEat(vector<uint8_t> &buffer, int &pos) {
 	return output;
 }
 
+void encodeGameOver(vector<uint8_t> &buffer) {
+	buffer.push_back(GAME_OVER_N);
+	encodeInt(buffer, 5);
+}
+bool decodeGameOver(vector<uint8_t> &buffer, int &pos) {
+	if (buffer[pos] != GAME_OVER_N) {
+		cerr << "attempt to decode game over but data was not game over! "<<endl;
+		return false;
+	}
+	int totalContentLength = static_cast<int>(buffer.size()) - pos;
+	pos++;
+	int dataLength = decodeInt(buffer, pos);
+	if (dataLength != 13) {
+		cerr << "game over packet did not have the correct length" << endl;
+		return false;
+	}
+	if (totalContentLength < dataLength) {
+		cerr << "data transition failure. game over incoming data not fully transmitted" << endl;
+		return false;
+	}
+	return true;
+}
+
 void * networkReadThread(void * thread_data) {
 	const auto * info = static_cast<networkRecieveThreadInfo *>(thread_data);
 	SocketInterface * socket = info -> socket;
@@ -649,7 +676,7 @@ void * networkReadThread(void * thread_data) {
 				for (int i = 0; i < newApples.size(); i++) {
 					info ->apples->push_back(newApples[i]);
 				}
-			} else if (APPLE_EAT_N) {//this packet is an apple was eaten
+			} else if (packetType == APPLE_EAT_N) {//this packet is an apple was eaten
 				position appleEaten = decodeAppleEat(receivedData, dataPos);
 				for (int i = 0; i < info ->apples->size(); i++) {
 					if (info ->apples->at(i).x == appleEaten.x && info ->apples->at(i).y == appleEaten.y) {
@@ -657,7 +684,11 @@ void * networkReadThread(void * thread_data) {
 						break;
 					}
 				}
-			} else {
+			} else if (packetType == GAME_OVER_N) {
+				gameRunning = false;
+				gameWon = true;
+				decodeGameOver(receivedData, dataPos);
+			}else {
 				cerr << "unknown packet type " << packetType << endl;
 				break;
 			}
