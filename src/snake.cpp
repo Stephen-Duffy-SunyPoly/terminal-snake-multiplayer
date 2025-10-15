@@ -36,7 +36,6 @@ using namespace rogueutil;
 int width;
 int height;
 bool gameRunning=true;
-bool paused=false;
 bool gameWon = false;
 bool ready = false;
 
@@ -267,10 +266,6 @@ int main() {
 
 	//main game process loop
 	while(gameRunning){
-		if(paused){
-			msleep(20);
-			continue;
-		}
 
 		render(screen,prevScreen);
 		//Remove the old snake from the screen
@@ -483,16 +478,13 @@ void * inputThread(void * args){
 		if((key == KEY_LEFT || key =='a' || key == 'A')  && facAx==0){
 			*headingDirection=3;
 		}
-		if(key == 'p' || key == 'P'){
-			paused = !paused;
-		}
 		if(key == 'q' || key == 'Q'){
 			gameRunning=false;
 		}
 		if(key == 'h' || key == 'H'){
 			resetColor();
 			gotoxy(1,1);
-			cout << "Arrow Keys / WASD - change direction" << endl << "P - pause" << endl <<"Q - quit"<<endl<<"H - display this message";
+			cout << "Arrow Keys / WASD - change direction" << endl <<"Q - quit"<<endl<<"H - display this message";
 		}
 	}
 	showcursor();//just in case
