@@ -159,12 +159,15 @@ int main() {
 	//fill the real screen with white so that any un playable space will be knwon
 	setBackgroundColor(WHITE);
 	gotoxy(0,0);
+	cout.flush();
 	for (int i = 0; i < height; i++) {
 		for (int j = 0; j < width; j++) {
 			cout << " ";
 		}
 	}
+	cout.flush();
 	resetColor();
+	cout.flush();
 
 	int heading =0;
 	vector<position> apples;
