@@ -13,12 +13,14 @@
  * SNAKE_N - id 3, length 9 + 8*snake length, data snake length - int, (repeats) snake X - int snake Y - int
  * APPLE_EAT_N - id 4, length 13, data: apple X - int, apple Y - int
  * GAME_OVER_N - id 5, length 5
+ * READY_N - id 6, length 5
 */
 #define WINDOW_SIZE_N 1
 #define APPLES_N 2
 #define SNAKE_N 3
 #define APPLE_EAT_N 4
 #define GAME_OVER_N 5
+#define READY_N 6
 
 
 #ifdef _WIN32
@@ -75,6 +77,8 @@ void encodeAppleEat(vector<uint8_t> &buffer, position &appleEat);
 position decodeAppleEat(vector<uint8_t> &buffer, int &pos);
 void encodeGameOver(vector<uint8_t> &buffer);
 bool decodeGameOver(vector<uint8_t> &buffer, int &pos);
+void encodeReady(vector<uint8_t> &buffer);
+bool decodeReady(vector<uint8_t> &buffer, int &pos);
 
 int main() {
 	width = tcols();
@@ -151,6 +155,7 @@ int main() {
 	stopHandler::setContrlCHandler(&handleStop);//register the handler for ctrl c
 	//Microsoft visual c++ compiler does not allow arrays to be defined with variables :'(
 	char * prevScreen = (char *)malloc(useWindow.y*useWindow.x*sizeof(char));
+	memset(prevScreen,0,useWindow.y*useWindow.x*sizeof(char));//initialize the previous screen to all 0s
 	//y, x
 	char * screen = (char *)malloc(useWindow.y*useWindow.x*sizeof(char));
 	//initialize the screen with emptiness
@@ -175,6 +180,7 @@ int main() {
 
 	int heading =0;
 	vector<position> apples;
+	//if on the host spawn the first 4 apples
 	if (hosting) {
 		apples.push_back({5,5});
 		while (apples.size() < 4) {// ensure there are 4 apples
@@ -223,7 +229,20 @@ int main() {
 		screen[p2.y*useWindow.x+p2.x] = 'E';
 	}
 
+	//render the initial screen
+	render(screen,prevScreen);
 
+	//wait for client to be ready
+	encodeReady(sendingBuffer);//signal you are readdy
+	socket.send(sendingBuffer);
+	receivingBuffer = socket.receive();
+	int tmpIndex = 0;
+	//at this point we are only expecting to receive the ready signal
+	if (!decodeReady(receivingBuffer,tmpIndex)) {
+		cerr << "FAILED TO DECODE READY PACKET!" << endl;
+		socket.close();
+		return EXIT_FAILURE;
+	}
 
 
 	//hidecursor();
@@ -373,8 +392,12 @@ int main() {
 			encodeApples(sendingBuffer, apples);
 		}
 		//other common things to send
-
-		socket.send(sendingBuffer);
+		if (socket.isConnected()) {//if the socket is open then send the data
+			socket.send(sendingBuffer);
+		} else {
+			//if not conncted then stop the game
+			gameRunning = false;
+		}
 
 		msleep((heading % 2 ==0)?60:35);
 		sendingBuffer.clear();
@@ -651,6 +674,29 @@ bool decodeGameOver(vector<uint8_t> &buffer, int &pos) {
 	}
 	if (totalContentLength < dataLength) {
 		cerr << "data transition failure. game over incoming data not fully transmitted" << endl;
+		return false;
+	}
+	return true;
+}
+
+void encodeReady(vector<uint8_t> &buffer) {
+	buffer.push_back(READY_N);
+	encodeInt(buffer, 5);
+}
+bool decodeReady(vector<uint8_t> &buffer, int &pos) {
+	if (buffer[pos] != READY_N) {
+		cerr << "attempt to decode ready but data was not ready! "<<endl;
+		return false;
+	}
+	int totalContentLength = static_cast<int>(buffer.size()) - pos;
+	pos++;
+	int dataLength = decodeInt(buffer, pos);
+	if (dataLength != 5) {
+		cerr << "ready packet did not have the correct length" << endl;
+		return false;
+	}
+	if (totalContentLength < dataLength) {
+		cerr << "data transition failure. ready data not fully transmitted" << endl;
 		return false;
 	}
 	return true;
