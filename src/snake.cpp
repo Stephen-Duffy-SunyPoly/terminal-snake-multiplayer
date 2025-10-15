@@ -415,7 +415,7 @@ void render(char current[] , char prev[]){
 							setBackgroundColor(GREEN);
 						}
 						//re wright this char
-						cout << " ";
+						cout << "@";
 						break;
 					case 'A'://apple
 						gotoxy(x,y);
