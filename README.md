@@ -11,13 +11,16 @@ h: display help text
 [Rogueutil](https://github.com/sakhmatd/rogueutil)
 
 ### build instruction:
-#### linux:
+#### Linux / MAC:
 ```sh
 git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
 g++ -o snake.game -pthread src/snake.cpp -std=c++17
+# You may wish to run `reset` after the game exits to fix your terminals printing
 ```
-#### windows:
+
+
+#### Windows:
 ```cmd
 git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake

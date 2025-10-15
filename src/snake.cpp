@@ -28,6 +28,7 @@
 #else
 	#include <pthread.h>
     #include <memory>
+	#include <cstring>
 #endif
 using namespace std;
 using namespace rogueutil;
