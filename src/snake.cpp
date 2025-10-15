@@ -10,9 +10,13 @@
  * types:
  * WINDOW_SIZE_N - id 1, length 13,data: client with - int, client height - int
  * APPLES_N - id 2, length 9 + 8*numapples, data: number apples -int, (repeats) apple X - int apple Y - int
+ * SNAKE_N - id 3, length 9 + 8*snake length, data snake length - int, (repeats) snake X - int snake Y - int
+ * APPLE_EAT_N - id 4, length 13, data: apple X - int, apple Y - int
 */
 #define WINDOW_SIZE_N 1
 #define APPLES_N 2
+#define SNAKE_N 3
+#define APPLE_EAT_N 4
 
 
 #ifdef _WIN32
@@ -32,7 +36,13 @@ typedef struct position{
 	int y;
 }position;
 
+typedef struct networkRecieveThreadInfo {
+	SocketInterface * socket;
+	vector<position> * apples;
+} networkRecieveThreadInfo;
+
 position useWindow;
+vector<position> tmpOtherSnake;
 
 void handleStop(){
 	gameRunning=false;
@@ -45,12 +55,21 @@ void handleStop(){
 
 void render(char current[] , char prev[]);
 void * inputThread(void *);
+void * networkReadThread(void *);
 #ifdef _WIN32
 	DWORD WINAPI winThread(LPVOID params);
+	DWORD WINAPI winThread2(LPVOID params);
 #endif
 void encodeInt(vector<uint8_t> &buffer, int data);
 int decodeInt(vector<uint8_t> &buffer, int &pos);
+
 position decodeWindowSize(vector<uint8_t> &buffer, int &pos);
+void encodeApples(vector<uint8_t> &buffer, vector<position> &apples);
+vector<position> decodeApples(vector<uint8_t> &buffer, int &pos);
+void encodeSnake(vector<uint8_t> &buffer, vector<position> &snake);
+vector<position> decodeSnake(vector<uint8_t> &buffer, int &pos);
+void encodeAppleEat(vector<uint8_t> &buffer, position &appleEat);
+position decodeAppleEat(vector<uint8_t> &buffer, int &pos);
 
 int main() {
 	width = tcols();
@@ -113,7 +132,7 @@ int main() {
 		cerr << "Disconnected" << endl;
 		return EXIT_FAILURE;
 	}
-
+	sendingBuffer.clear();
 	//at this time we only expect to recieve a window size paket so we will blindly try to decode it
 	int revieveBufferPos = 0;
 	position theirWindow = decodeWindowSize(receivingBuffer, revieveBufferPos);
@@ -147,27 +166,77 @@ int main() {
 	resetColor();
 
 	int heading =0;
-	position apple;
-	apple.x=5;
-	apple.y=5;
-	vector<position> snake;
-	position p;
-	p.x=useWindow.x/2;
-	p.y=useWindow.y/2;
-	snake.push_back(p);
+	vector<position> apples;
+	if (hosting) {
+		apples.push_back({5,5});
+		while (apples.size() < 4) {// ensure there are 4 apples
+			position apple{};
+			apple.x = rand()%(useWindow.x-5)+3;
+			apple.y = rand()%(useWindow.y-5)+3;
+			apples.push_back(apple);
+		}
+		//apply the apples to the screen
+		for (int i = 0; i < apples.size(); i++) {
+			screen[apples[i].y*useWindow.x+apples[i].x] = 'A';
+		}
 
-	screen[apple.y*useWindow.x+apple.x] = 'A';
-	screen[p.y*useWindow.x+p.x] = 'S';
+		//send the apple info to the client
+		encodeApples(sendingBuffer, apples);
+		socket.send(sendingBuffer);
+	}
+	vector<position> snake;
+	vector<position> otherSnake;
+	//set the initial positions of the snakes and add them to the screen
+	if (hosting) {
+		position p;
+		p.x=useWindow.x/4;
+		p.y=useWindow.y/2;
+		snake.push_back(p);
+		position p2;
+		p2.x=useWindow.x/4+useWindow.x/2;
+		p2.y=useWindow.y/2;
+		otherSnake.push_back(p2);
+
+		screen[p.y*useWindow.x+p.x] = 'S';
+		screen[p2.y*useWindow.x+p2.x] = 'E';
+	} else {
+		position p;
+		p.x=useWindow.x/4+useWindow.x/2;
+		p.y=useWindow.y/2;
+		snake.push_back(p);
+		position p2;
+		p2.x=useWindow.x/4;
+		p2.y=useWindow.y/2;
+		otherSnake.push_back(p2);
+
+		screen[p.y*useWindow.x+p.x] = 'S';
+		screen[p2.y*useWindow.x+p2.x] = 'E';
+	}
+
+
+
 
 	//hidecursor();
 	volatile CursorHider hideCursor;//automatically hides the cursor and unhides when deallocated
+
+	networkRecieveThreadInfo netThreadInfo;
+	netThreadInfo.socket = &socket;
+	netThreadInfo.apples = &apples;
+
+	//create the threads for input processing and network handling
 	#ifdef _WIN32
 		DWORD myThreadID;
 		CreateThread(0, 0, winThread, &heading, 0, &myThreadID);
+		DWORD myThreadID2;
+		CreateThread(0, 0, winThread2, &netThreadInfo, 0, &myThreadID2);
 	#else
 		pthread_t inputThreadObject;
 		pthread_create(&inputThreadObject, nullptr,inputThread,(void *)&heading);
+		pthread_t inputThreadObject2;
+		pthread_create(&inputThreadObject2, nullptr,networkReadThread,(void *)&netThreadInfo);
 	#endif
+
+	//main game process loop
 	while(gameRunning){
 		if(paused){
 			msleep(20);
@@ -179,6 +248,12 @@ int main() {
 		for(size_t i=0;i<snake.size();i++){
 			screen[snake[i].y*useWindow.x+snake[i].x] = '.';
 		}
+		//remove the old enemy snake from the screen
+		for(size_t i=0;i<otherSnake.size();i++){
+			screen[otherSnake[i].y*useWindow.x+otherSnake[i].x] = '.';
+		}
+		//swap the other snake for the most recent one from the network
+		otherSnake = tmpOtherSnake;
 
 		//Calculate the new snake
 		position sp{};
@@ -200,33 +275,63 @@ int main() {
 				sp.x = snake[0].x-1;
 				sp.y = snake[0].y;
 				break;
-		}//check to see if the snake has collided to its self
+		}//check to see if the snake has collided to its self or the other snake
 		for(size_t i=0;i<snake.size();i++){
 			if(snake[i].x == sp.x && snake[i].y == sp.y){
 				gameRunning=false;
+				//TODO send you win to the other plauer
+				break;
+			}
+		}
+		for(size_t i=0;i<otherSnake.size();i++){
+			if(otherSnake[i].x == sp.x && otherSnake[i].y == sp.y){
+				gameRunning=false;
+				//TODO send you win to the other plauer
 				break;
 			}
 		}
 
-		//if the head is on the apple
-		if(snake[0].x == apple.x && snake[0].y == apple.y){
-			position np;
-			snake.push_back(np);
-			bool notValid = true;
-			while(notValid){
-				apple.x = rand()%(useWindow.x-5)+3;
-				apple.y = rand()%(useWindow.y-5)+3;
-				notValid=false;
-				for(size_t i=0;i<snake.size();i++){
-					if(snake[i].x == apple.x && snake[i].y == apple.y){
-						notValid=true;
-						break;
+		//if the head is on an apple
+		for(size_t i=0;i<apples.size();i++) {
+			position apple = apples[i];
+			if(snake[0].x == apple.x && snake[0].y == apple.y){
+				apples.erase(apples.begin()+i);
+				position np;
+				snake.push_back(np);
+				//apple regen will be handled on the host
+				if (!hosting) {
+					encodeAppleEat(sendingBuffer, apple);
+				}
+			}
+		}
+
+		if (hosting) {
+			//only on the host
+			while (apples.size()<4){
+				position apple{};
+				bool notValid = true;
+				//generate a new valid apple position
+				while(notValid){
+					apple.x = rand()%(useWindow.x-5)+3;
+					apple.y = rand()%(useWindow.y-5)+3;
+					notValid=false;
+					for(size_t i=0;i<snake.size();i++){
+						if(snake[i].x == apple.x && snake[i].y == apple.y){
+							notValid=true;
+							break;
+						}
+					}
+					for(size_t i=0;i<otherSnake.size();i++){
+						if(otherSnake[i].x == apple.x && otherSnake[i].y == apple.y){
+							notValid=true;
+							break;
+						}
 					}
 				}
 			}
-			screen[apple.y*useWindow.x+apple.x]='A';
 		}
 
+		//handle moving this snake
 		tmp = snake[0];
 		snake[0] = sp;
 		for(size_t i=1;i<snake.size();i++){
@@ -235,20 +340,38 @@ int main() {
 			snake[i]=tmp2;
 		}
 
-
+		for (size_t i = 0; i<apples.size();i++) {
+			screen[apples[i].y*useWindow.x+apples[i].x] = 'A';
+		}
 
 		//add the new snake to the screen
 		for(size_t i=0;i<snake.size();i++){
 			screen[snake[i].y*useWindow.x+snake[i].x] = 'S';
 		}
+		for(size_t i=0;i<otherSnake.size();i++){
+			screen[otherSnake[i].y*useWindow.x+otherSnake[i].x] = 'E';
+		}
 		if(sp.x<=0 || sp.x >=useWindow.x || sp.y <= 0 || sp.y >= useWindow.y){
 			gameRunning = false;
+			//TODO send the you win message to the other plauer
 		}
+
+		//send snake info and updated apples if on the host
+		encodeSnake(sendingBuffer, snake);
+		if(hosting) {
+			encodeApples(sendingBuffer, apples);
+		}
+		//other common things to send
+
+		socket.send(sendingBuffer);
+
 		msleep((heading % 2 ==0)?60:35);
+		sendingBuffer.clear();
 	}
 
 	resetColor();
 	showcursor();
+	socket.close();
 	gotoxy(2,useWindow.y -2);
 	cout << "GAME OVER!! Score:" <<snake.size() << endl;
 	//cout << snake[0].x <<" " << snake[0].y << endl;
@@ -342,6 +465,10 @@ void * inputThread(void * args){
 		inputThread((void* )params);
 		return 0;
 	}
+	DWORD WINAPI winThread2(LPVOID params){
+		networkReadThread((void* )params);
+		return 0;
+	}
 #endif
 
 void encodeInt(vector<uint8_t> &buffer, int data) {
@@ -391,4 +518,139 @@ position decodeWindowSize(vector<uint8_t> &buffer, int &pos) {
 	output.x = decodeInt(buffer, pos);
 	output.y = decodeInt(buffer, pos);
 	return output;
+}
+
+//APPLES_N - id 2, length 9 + 8*numapples, data: number apples -int, (repeats) apple X - int apple Y - int
+void encodeApples(vector<uint8_t> &buffer, vector<position> &apples) {
+	buffer.push_back(APPLES_N);
+	encodeInt(buffer, static_cast<int>(apples.size())*8+9);
+	encodeInt(buffer, static_cast<int>(apples.size()));
+	for (int i = 0; i < apples.size(); i++) {
+		encodeInt(buffer,apples[i].x);
+		encodeInt(buffer,apples[i].y);
+	}
+}
+vector<position> decodeApples(vector<uint8_t> &buffer, int &pos) {
+	//validate things are prbly transmitted correctly
+	if (buffer[pos] != APPLES_N) {
+		cerr << "attempt to decode apples but data type was not apples! "<<endl;
+		return {};
+	}
+	int totalContentLength = static_cast<int>(buffer.size()) - pos;
+	pos++;
+	int dataLength = decodeInt(buffer, pos);
+	if (totalContentLength < dataLength) {
+		cerr << "data transition failure. Apples incoming data not fully transmitted" << endl;
+		return {};
+	}
+	int numApples = decodeInt(buffer, pos);
+	vector<position> output(numApples);
+	for (int i = 0; i < numApples; i++) {
+		position apple;
+		apple.x = decodeInt(buffer, pos);
+		apple.y = decodeInt(buffer, pos);
+		output.push_back(apple);
+	}
+	return output;
+}
+
+void encodeSnake(vector<uint8_t> &buffer, vector<position> &snake) {
+	buffer.push_back(SNAKE_N);
+	encodeInt(buffer, static_cast<int>(snake.size())*8+9);
+	encodeInt(buffer, static_cast<int>(snake.size()));
+	for (int i = 0; i < snake.size(); i++) {
+		encodeInt(buffer,snake[i].x);
+		encodeInt(buffer,snake[i].y);
+	}
+}
+vector<position> decodeSnake(vector<uint8_t> &buffer, int &pos) {
+	//validate things are prbly transmitted correctly
+	if (buffer[pos] != SNAKE_N) {
+		cerr << "attempt to decode snake but data type was not sbake! "<<endl;
+		return {};
+	}
+	int totalContentLength = static_cast<int>(buffer.size()) - pos;
+	pos++;
+	int dataLength = decodeInt(buffer, pos);
+	if (totalContentLength < dataLength) {
+		cerr << "data transition failure. Snake incoming data not fully transmitted" << endl;
+		return {};
+	}
+	int snakeLength = decodeInt(buffer, pos);
+	vector<position> output(snakeLength);
+	for (int i = 0; i < snakeLength; i++) {
+		position snakeSeg;
+		snakeSeg.x = decodeInt(buffer, pos);
+		snakeSeg.y = decodeInt(buffer, pos);
+		output.push_back(snakeSeg);
+	}
+	return output;
+}
+
+void encodeAppleEat(vector<uint8_t> &buffer, position &appleEat) {
+	buffer.push_back(APPLE_EAT_N);
+	encodeInt(buffer, 13);
+	encodeInt(buffer, appleEat.x);
+	encodeInt(buffer, appleEat.y);
+}
+
+position decodeAppleEat(vector<uint8_t> &buffer, int &pos) {
+	if (buffer[pos] != APPLE_EAT_N) {
+		cerr << "attempt to decode apple eat but data was not apple eat! "<<endl;
+		return {-1,-1};
+	}
+	int totalContentLength = static_cast<int>(buffer.size()) - pos;
+	pos++;
+	int dataLength = decodeInt(buffer, pos);
+	if (dataLength != 13) {
+		cerr << "apple eat packet did not have the correct length" << endl;
+		return {-1,-1};
+	}
+	if (totalContentLength < dataLength) {
+		cerr << "data transition failure. apple eat incoming data not fully transmitted" << endl;
+		return {-1,-1};
+	}
+	position output;
+	//decode the actual data
+	output.x = decodeInt(buffer, pos);
+	output.y = decodeInt(buffer, pos);
+	return output;
+}
+
+void * networkReadThread(void * thread_data) {
+	const auto * info = static_cast<networkRecieveThreadInfo *>(thread_data);
+	SocketInterface * socket = info -> socket;
+	while (socket->isConnected()) {
+		vector<uint8_t> receivedData = socket->receive();
+		int dataPos = 0;
+		//while a packet has not been fully possessed yet
+		while (dataPos < receivedData.size()) {
+			uint8_t packetType = receivedData[dataPos];
+
+			if (packetType == SNAKE_N) {//this packet is the other players snake
+				const vector<position> incomingSnake = decodeSnake(receivedData, dataPos);
+				tmpOtherSnake = incomingSnake;
+			} else if (packetType == APPLES_N){//this packet is the current apples
+				vector<position> newApples = decodeApples(receivedData, dataPos);
+				info ->apples->clear();
+				//perhaps revisit to make more thread safe
+				for (int i = 0; i < newApples.size(); i++) {
+					info ->apples->push_back(newApples[i]);
+				}
+			} else if (APPLE_EAT_N) {//this packet is an apple was eaten
+				position appleEaten = decodeAppleEat(receivedData, dataPos);
+				for (int i = 0; i < info ->apples->size(); i++) {
+					if (info ->apples->at(i).x == appleEaten.x && info ->apples->at(i).y == appleEaten.y) {
+						info ->apples->erase(info ->apples->begin() + i);
+						break;
+					}
+				}
+			} else {
+				cerr << "unknown packet type " << packetType << endl;
+				break;
+			}
+
+		}
+	}
+	return nullptr;
 }
