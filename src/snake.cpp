@@ -196,6 +196,7 @@ int main() {
 		p2.x=useWindow.x/4+useWindow.x/2;
 		p2.y=useWindow.y/2;
 		otherSnake.push_back(p2);
+		tmpOtherSnake.push_back(p2);
 
 		screen[p.y*useWindow.x+p.x] = 'S';
 		screen[p2.y*useWindow.x+p2.x] = 'E';
@@ -208,6 +209,7 @@ int main() {
 		p2.x=useWindow.x/4;
 		p2.y=useWindow.y/2;
 		otherSnake.push_back(p2);
+		tmpOtherSnake.push_back(p2);
 
 		screen[p.y*useWindow.x+p.x] = 'S';
 		screen[p2.y*useWindow.x+p2.x] = 'E';
@@ -374,8 +376,12 @@ int main() {
 	socket.close();
 	gotoxy(2,useWindow.y -2);
 	cout << "GAME OVER!! Score:" <<snake.size() << endl;
-	//cout << snake[0].x <<" " << snake[0].y << endl;
+
+
 	showcursor();
+	msleep(1000);//wait 1 second
+	cout << "Press any key to continue"<<endl;
+	anykey();
 	//cursor should auto unhide but in case it does not this is here
 	free(prevScreen);
 	free(screen);

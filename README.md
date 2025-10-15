@@ -13,19 +13,19 @@ h: display help text
 ### build instruction:
 #### linux:
 ```sh
-git clone https://github.com/jSdCool/terminal-snake
+git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
 g++ -o snake.game -pthread src/snake.cpp
 ```
 #### windows:
 ```cmd
-git clone https://github.com/jSdCool/terminal-snake
+git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
 g++ -o snake.exe -lws2_32 src/snake.cpp
 ```
 or with visual c++ compiler
 ```cmd
-git clone https://github.com/jSdCool/terminal-snake
+git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
 cl src/snake.cpp -lws2_32
 ```
