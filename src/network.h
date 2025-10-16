@@ -6,10 +6,10 @@
 #define TERMINAL_SNAKE_MULTYPLAYER_NETWORK_H
 
 #ifdef _WIN32
-//woindows specific imports and defines
+//windows specific imports and defines
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma comment(lib, "Ws2_32.lib") // link the windows networking libs apperently
+#pragma comment(lib, "Ws2_32.lib") // link the windows networking libs apparently
 
 #define socketDscriptor SOCKET
 #define socketFailure INVALID_SOCKET
@@ -32,11 +32,15 @@
 #define INPUT_NETWORK_BUFFER_SIZE 32768
 
 
-//cross platform things can go here
+//platform specific things can go here
+
+//create and bind a server socket the start listening on it, in the appropriate platform specific way
 socketDscriptor startServerSocket_native(int port) {
 #ifdef _WIN32
-    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == INVALID_SOCKET) {
+    //windows method
+
+    SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);//create a socket
+    if (serverSocket == INVALID_SOCKET) {//validate it created
         std::cerr << "Socket creation failed "<< WSAGetLastError() <<std::endl;
         WSACleanup();
         return INVALID_SOCKET;
@@ -47,7 +51,7 @@ socketDscriptor startServerSocket_native(int port) {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port = htons(static_cast<u_short>(port));
 
-    //bind the socket
+    //bind the socket to be a server socket
     if (bind(serverSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
         std::cerr << "Bind failed.\n";
         closesocket(serverSocket);
@@ -55,19 +59,22 @@ socketDscriptor startServerSocket_native(int port) {
         return INVALID_SOCKET;
     }
 
-    listen(serverSocket, SOMAXCONN);
+    listen(serverSocket, SOMAXCONN);//start listening for connections on that socket
 
     return serverSocket;
 #else
+    //non windows method
+    //create the socket address info
     addrinfo addressInfo{}, *result;
     addressInfo.ai_family = AF_INET;
     addressInfo.ai_socktype = SOCK_STREAM;
     addressInfo.ai_flags = AI_PASSIVE;//use my ip i guess
     constexpr int yes = 1;
 
+    //some lunatic decided the port should be entered as a string so we have to convert it to one here
     std::string portString = std::to_string(port);
 
-    if (int rv; (rv = getaddrinfo(nullptr,portString.c_str(),&addressInfo, &result)) != 0) {
+    if (int rv; (rv = getaddrinfo(nullptr,portString.c_str(),&addressInfo, &result)) != 0) {//validate that address info
         std::cerr << "get address info error: " << gai_strerror(rv) << std::endl;
         return socketFailure;//failure
     }
@@ -76,7 +83,7 @@ socketDscriptor startServerSocket_native(int port) {
     int socketFileDescriptor = socketFailure;
     addrinfo *p;
     for(p  = result; p != nullptr; p = p->ai_next) {
-        //if this one failes then move on to the next
+        //attempt to create a socket with address
         if ((socketFileDescriptor = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("server: socket");
             continue;
@@ -98,7 +105,7 @@ socketDscriptor startServerSocket_native(int port) {
         break;
     }
     freeaddrinfo(result);//prevent memory leaks
-    if (p == nullptr) {
+    if (p == nullptr) {//make sure we got something
         std::cerr << "Server failed to bind" << std::endl;
         return socketFailure;
     }
@@ -110,62 +117,69 @@ socketDscriptor startServerSocket_native(int port) {
 #endif
 }
 
+//accept the first incoming connection on a server socket, in the appropriate platform specific way
 socketDscriptor acceptIncomingConnection_native(socketDscriptor serverSocket) {
 #ifdef _WIN32
+    //window method
+    //create an address object for the client address to be placed in, we do not currently make use of this
     sockaddr_in clientAddress;
     int clientAddressLength = sizeof(clientAddress);
-    SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddress, &clientAddressLength);
-    if (clientSocket == INVALID_SOCKET) {
+    SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddress, &clientAddressLength);//attempt to accept the connection
+    if (clientSocket == INVALID_SOCKET) {//validate that a connection was accepted
         std::cerr << "Accept failed.\n";
         closesocket(serverSocket);
         WSACleanup();
         return INVALID_SOCKET;
     }
-    closesocket(serverSocket);
+    closesocket(serverSocket);//close the server socket as we only needed 1 connection
     return clientSocket;
 #else
-    sockaddr_storage theirAddress{};
+    //non windows method
+    sockaddr_storage theirAddress{};//prepair the struct for their address that we will discard
     socklen_t theirAddressSize = sizeof(theirAddress);
+    //attempt to accept the incoming connection
     socketDscriptor clientSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&theirAddress), &theirAddressSize);
-    if (clientSocket == -1) {
+    if (clientSocket == -1) {//validate a connection occored
         std::cerr << "Failed to accept connection" << std::endl;
         perror("accept");
         return socketFailure;
     }
-    //optionally close the server socket here
+    //closer the server socket as we only wanted 1 connection
     close(serverSocket);
     return clientSocket;
 
 #endif
 }
 
+//close the socket, in the appropriate platform specific way
 void closeSocket_native(socketDscriptor socket) {
 #ifdef _WIN32
-    if (socket != INVALID_SOCKET) {
+    if (socket != INVALID_SOCKET) {//dont try to close an invalid socket
         closesocket(socket);
     }
 #else
-    if (socket != socketFailure && socket != 0){
+    if (socket != socketFailure && socket != 0){//dont try to close an invlaid socket
         close(socket);
     }
     #endif
 }
-
+//connect to a server, in the appropriate platform specific way
 socketDscriptor connectToServer_native(const std::string &ip,int port) {
 #ifdef _WIN32
+    //windows method
     sockaddr_in serverAddress;
-    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);//create the socket
     if (clientSocket == INVALID_SOCKET) {
         std::cerr << "Socket creation failed.\n";
         WSACleanup();
         return INVALID_SOCKET;
     }
 
-    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_family = AF_INET;//create the destination address info
     serverAddress.sin_addr.s_addr = inet_addr(ip.c_str());
-    serverAddress.sin_port = htons(port);
+    serverAddress.sin_port = htons(port);//hey look this takes an int what a concept
 
-    //the connection
+    //try to connect
     if (connect(clientSocket, (sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
         std::cerr << "Connection failed.\n";
         closesocket(clientSocket);
@@ -175,13 +189,14 @@ socketDscriptor connectToServer_native(const std::string &ip,int port) {
 
     return clientSocket;
 #else
-    addrinfo addressInfo{}, *serverInfo;
+    //non windows method
+    addrinfo addressInfo{}, *serverInfo;//create the server address info
     addressInfo.ai_family = AF_UNSPEC;
     addressInfo.ai_socktype = SOCK_STREAM;
 
-    std::string portString = std::to_string(port);
+    std::string portString = std::to_string(port);//why is the port submitted as a string?
 
-    if (int rv; (rv = getaddrinfo(ip.c_str(),portString.c_str(),&addressInfo, &serverInfo)) != 0) {
+    if (int rv; (rv = getaddrinfo(ip.c_str(),portString.c_str(),&addressInfo, &serverInfo)) != 0) {//validate the address info
         std::cerr << "get address info error: " << gai_strerror(rv) << std::endl;
         return socketFailure;//failure
     }
@@ -190,12 +205,12 @@ socketDscriptor connectToServer_native(const std::string &ip,int port) {
     addrinfo *p;
     // loop through all the results and connect to the first we can
     for(p = serverInfo; p != nullptr; p = p->ai_next) {
-        if ((socketFileDescriptor = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+        if ((socketFileDescriptor = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {//get a socket
             perror("client: socket");
             continue;
         }
 
-        //attempt tp connect
+        //attempt to connect
         if (connect(socketFileDescriptor, p->ai_addr, p->ai_addrlen) == -1) {
             //if the connection fails then move to the next one
             perror("client: connect");
@@ -206,7 +221,7 @@ socketDscriptor connectToServer_native(const std::string &ip,int port) {
         break;
     }
     freeaddrinfo(serverInfo);
-    if (p == nullptr) {
+    if (p == nullptr) {//validation
         std::cerr << "Socket failed to connect" << std::endl;
         return socketFailure;
     }
@@ -214,7 +229,7 @@ socketDscriptor connectToServer_native(const std::string &ip,int port) {
 #endif
 }
 
-
+//send data over a socket, in the appropriate platform specific way
 void sendData_native(socketDscriptor socket, const uint8_t * data, size_t length) {
 #ifdef _WIN32
     send(socket,reinterpret_cast<const char *>(data),static_cast<int>(length),0);
@@ -223,6 +238,7 @@ void sendData_native(socketDscriptor socket, const uint8_t * data, size_t length
 #endif
 }
 
+//attempt to read data from a socket, in the appropriate platform specific way
 long receiveData_native(socketDscriptor socket, uint8_t *dataBuffer, size_t length) {
 #ifdef _WIN32
     return recv(socket,reinterpret_cast<char *>(dataBuffer),static_cast<int>(length),0);
@@ -231,6 +247,7 @@ long receiveData_native(socketDscriptor socket, uint8_t *dataBuffer, size_t leng
 #endif
 }
 
+//cross platform, simple abstracted network interface
 class SocketInterface {
 
     bool isServer;
@@ -241,11 +258,13 @@ class SocketInterface {
     uint8_t dataBuffer[INPUT_NETWORK_BUFFER_SIZE];
 
     public:
+        //create a new client socket interface
         SocketInterface(std::string &ip, int port) {
             isServer = false;
             this->ip = ip;
             this->port = port;
 #ifdef _WIN32
+            //initialize the windows networking stuff
             //the IDE is showing an error here but it builds fine sooooooooooooo
             WSADATA wsaData;
             int result;//init the windows network lib
@@ -255,11 +274,12 @@ class SocketInterface {
             }
 #endif
         }
-
+        //create a new server socket interface
         explicit SocketInterface(int port) {
             isServer = true;
             this->port = port;
 #ifdef _WIN32
+            //initialize the windows networking stuff
             //the IDE is showing an error here but it builds fine sooooooooooooo
             WSADATA wsaData;
             int result;//init the windows network lib
@@ -270,6 +290,7 @@ class SocketInterface {
 #endif
         }
 
+        //start the server / try to connect to the other client
         bool connect() {
             //start listening or try to connect to the host
             if (isServer) {
@@ -289,6 +310,7 @@ class SocketInterface {
                 connected = true;
                 return true;
             } else {
+                //connect to the specified server
                 clientSocket = connectToServer_native(ip, port);
                 if (clientSocket == socketFailure) {
                     std::cerr << "Failed to connect to server!" << std::endl;
@@ -299,10 +321,12 @@ class SocketInterface {
             }
         }
 
+        //get if this socket thinks it is connected
         [[nodiscard]] bool isConnected() const {
             return connected;
         }
 
+        //send data to the other client
         void send(const std::vector<uint8_t>& data) {
             if (!connected) {
                 std::cerr << "attempted to send data but socket is not connected" << std::endl;
@@ -312,6 +336,7 @@ class SocketInterface {
             sendData_native(clientSocket,data.data(),data.size());
         }
 
+        //attempt to read data from the other client
         std::vector<uint8_t> receive() {
             if (!connected) {
                 //if not connected then just return nothing
@@ -332,6 +357,7 @@ class SocketInterface {
             return data;
         }
 
+        //close the socket
         void close() {
             closeSocket_native(clientSocket);
             connected = false;
