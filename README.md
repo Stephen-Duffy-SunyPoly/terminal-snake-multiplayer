@@ -25,5 +25,5 @@ with visual c++ compiler
 ```cmd
 git clone https://github.com/Stephen-Duffy-SunyPoly/terminal-snake-multiplayer
 cd terminal-snake
-cl src/snake.cpp -lws2_32 -std=c++17
+cl src/snake.cpp
 ```

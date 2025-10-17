@@ -366,13 +366,11 @@ int main() {
 					for(size_t i=0;i<snake.size();i++){//check it is not on the host's snake
 						if(snake[i].x == apple.x && snake[i].y == apple.y){
 							notValid=true;
-							break;
 						}
 					}
 					for(size_t i=0;i<otherSnake.size();i++){//check it is not on the other player's snake
 						if(otherSnake[i].x == apple.x && otherSnake[i].y == apple.y){
 							notValid=true;
-							break;
 						}
 					}
 				}
