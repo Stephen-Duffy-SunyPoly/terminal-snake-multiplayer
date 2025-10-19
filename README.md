@@ -1,11 +1,10 @@
 # snake
-a simple game of snake that can be played in your computer terminal
+A simple game of snake that can be played in your computer terminal with a friend
 
 ### controls:
-arrow keys/ WASD: change direction  
-q: quit   
-p: pause   
-h: display help text  
+Arrow keys/ WASD: change direction  
+Q: quit  
+H: display help text  
 
 ### used libraries: 
 [Rogueutil](https://github.com/sakhmatd/rogueutil)
